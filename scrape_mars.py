@@ -1,238 +1,168 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
-
-import pandas as pd
-import numpy as np
-import requests
+from splinter import Browser
 from bs4 import BeautifulSoup
-from splinter import browser
-from selenium import webdriver
-import urllib.parse
-import time #we will need it to add a sleep when scraping websites
-
-
-# In[2]:
-
-def scrape():
-    #Scrape the NASA Mars News Site and collect the latest News Title 
-    #and Paragraph Text. Assign the text to variables that you can reference later.
-
-    #first set the URL
-
-    url = 'https://mars.nasa.gov/news/'
-
-    #retrieve the page
-
-    response = requests.get(url)
-
-    #check the response code
-
-
-    # In[3]:
-
-
-    #create a BeautifulSoup object and parse the page
-
-    soup = BeautifulSoup(response.text, 'html.parser')
-
-    #pretty print the results
-
-    #print(soup.prettify())
-
-
-    # In[4]:
-
-
-    #get just the title
-    news_title = soup.find('div', class_='content_title').text
-    #we are going to put our results in a variable called news_title, and we are going to fetch the text of the 'content_title' div tag
-
-    news_title
-
-
-    # In[5]:
-
-
-    #then we are going to drop the Newline characters
-
-    clean_title = str(news_title)
-    #print (clean_title)
-
-
-    # In[6]:
-
-
-    #now we are going to fetch a paragraph
-    #it's of the class 'rollover_description_inner'
-
-    news_p = soup.find('div', class_='rollover_description_inner').text
-    news_p
-
-
-    # In[7]:
-
-
-    #drop the Newline's and other formatting
-
-
-    clean_p = str(news_p)
-    #print (clean_p)
-
-
-    # In[8]:
-
-
-    # Connect to a url to grab NASA's featured Mars image
-    # Use selenium to navegate to the page with the image
-    driver = webdriver.Firefox()
-    url_image = "https://www.jpl.nasa.gov/spaceimages/?search=&category=Mars"
-    driver.get(url_image)
-    time.sleep(1)
-    elem = driver.find_element_by_id("full_image")
-    elem.click()
-    time.sleep(1)
-    # Navigate to "more info" web site, where the full image URL is
-    elem = driver.find_element_by_link_text("more info")
-    elem.click()
-    time.sleep(1)
-    # Get the "more info" page URL to parse and find the image in full resolution
-    url_more_info = driver.current_url
-    # Use requests and soup to return the image url
-    r = requests.get(url_more_info)
-    html = r.text
-    soup = BeautifulSoup(html, "html.parser")
-    featured_image_url = (
-        "https://www.jpl.nasa.gov" + soup.find("figure", class_="lede").a["href"]
-    )
-    #print(featured_image_url)
-    # Close the driver
-    driver.close()
-
-
-    # In[ ]:
-
-
-    url_twitter = "https://twitter.com/marswxreport?lang=en"
-    # Create a Beautiful Soup object
-    r = requests.get(url_twitter)
-    html = r.text
-    soup = BeautifulSoup(html, "html.parser")
-    mars_weather = soup.find_all("div", class_="js-tweet-text-container")
-    # find the first actual weather tweet
-    mars_weather = mars_weather[0].text[:-26]
-    #print(mars_weather)
-
-
-    # In[ ]:
-
-
-
-
-
-    # In[ ]:
-
-
-    #Use Pandas to Scrape the Mars facts website.
-    url_facts = 'https://space-facts.com/mars/'
-
-    mars_table = pd.read_html(url_facts)
-    mars_table[0]
-
-    #pandas will automatically grab the table contents if it sees a table at the URL
-
-
-    # In[ ]:
-
-
-    #make it into a dataframe and name the columns
-
-    mars_df = mars_table[0]
-    mars_df.columns = ['Facts','Value']
-    mars_df
-
-
-    # In[ ]:
-
-
-    #then convert it to html so we can later embed it in our webpage
-
-    mars_html = mars_df.to_html(header=True, index =False)
-    mars_html
-
-
-    # In[ ]:
-
-
-    #scrape the hemisphere photo data
-    driver = webdriver.Firefox()
-    url = 'https://astrogeology.usgs.gov/search/results?q=hemisphere+enhanced&k1=target&v1=Mars'
-    driver.get(url)
-    html = driver.html
-    soup = BeautifulSoup(html,'html.parser')
-    hemispheres = soup.find('div',class_='collapsible results')
-    results = hemispheres.find_all('a')
-    #print(results)
-
-
-    # In[ ]:
-
-
-
-
-
-    # In[ ]:
-
-
-
-    #count how many results we have
-
-    len(results)
-
-
-    # In[ ]:
-
-
-    #create an empty list
-
-    hemispheres = []
-
-    #populate it with the images data
-
-    for result in results:
-        if result.h3:
-            title = result.h3.text
-            link = 'https://astrogeology.usgs.gov' + result['href']
-            #print(title,link)    
-            browser.visit(link)
-            time.sleep(5)
-            image_html = browser.html
-            soup = BeautifulSoup(image_html,'html.parser')
-            soup_image = soup.find('div', class_='downloads').find('li').a['href']
-            #print(soup_image)
-            mars_images = {'title':title, 'img_url':soup_image}
-            hemispheres.append(mars_images)
-
-
-    # In[ ]:
-
-
-    #print the list
-
-    #print(hemispheres)
-
-    listings = {
-        "id": 1,
-        "news_title": clean_title,
-        "news_p": clean_p,
-        "featured_image_url": featured_image_url,
-        "mars_weather": mars_weather,
-       "fact_table": mars_df,
-       "hemisphere_images": hemispheres
+import pandas as pd
+import datetime as dt
+
+
+def scrape_all():
+
+    # Initiate headless driver for deployment
+    browser = Browser("chrome", executable_path="chromedriver", headless=True)
+    news_title, news_paragraph = mars_news(browser)
+
+    # Run all scraping functions and store in dictionary.
+    data = {
+        "news_title": news_title,
+        "news_paragraph": news_paragraph,
+        "featured_image": featured_image(browser),
+        "hemispheres": hemispheres(browser),
+        "weather": twitter_weather(browser),
+        "facts": mars_facts(),
+        "last_modified": dt.datetime.now()
     }
 
+    # Stop webdriver and return data
+    browser.quit()
+    return data
 
-    return listings
-print(scrape())
+
+def mars_news(browser):
+    url = "https://mars.nasa.gov/news/"
+    browser.visit(url)
+
+    # Get first list item and wait half a second if not immediately present
+    browser.is_element_present_by_css("ul.item_list li.slide", wait_time=0.5)
+
+    html = browser.html
+    news_soup = BeautifulSoup(html, "html.parser")
+
+    try:
+        slide_elem = news_soup.select_one("ul.item_list li.slide")
+        news_title = slide_elem.find("div", class_="content_title").get_text()
+        news_p = slide_elem.find(
+            "div", class_="article_teaser_body").get_text()
+
+    except AttributeError:
+        return None, None
+
+    return news_title, news_p
+
+
+def featured_image(browser):
+    url = "https://www.jpl.nasa.gov/spaceimages/?search=&category=Mars"
+    browser.visit(url)
+
+    # Find and click the full image button
+    full_image_elem = browser.find_by_id("full_image")
+    full_image_elem.click()
+
+    # Find the more info button and click that
+    browser.is_element_present_by_text("more info", wait_time=0.5)
+    more_info_elem = browser.find_link_by_partial_text("more info")
+    more_info_elem.click()
+
+    # Parse the resulting html with soup
+    html = browser.html
+    img_soup = BeautifulSoup(html, "html.parser")
+
+    # Find the relative image url
+    img = img_soup.select_one("figure.lede a img")
+
+    try:
+        img_url_rel = img.get("src")
+
+    except AttributeError:
+        return None
+
+    # Use the base url to create an absolute url
+    img_url = f"https://www.jpl.nasa.gov{img_url_rel}"
+
+    return img_url
+
+
+def hemispheres(browser):
+
+    # A way to break up long strings
+    url = (
+        "https://astrogeology.usgs.gov/search/"
+        "results?q=hemisphere+enhanced&k1=target&v1=Mars"
+    )
+
+    browser.visit(url)
+
+    # Click the link, find the sample anchor, return the href
+    hemisphere_image_urls = []
+    for i in range(4):
+
+        # Find the elements on each loop to avoid a stale element exception
+        browser.find_by_css("a.product-item h3")[i].click()
+
+        hemi_data = scrape_hemisphere(browser.html)
+
+        # Append hemisphere object to list
+        hemisphere_image_urls.append(hemi_data)
+
+        # Finally, we navigate backwards
+        browser.back()
+
+    return hemisphere_image_urls
+
+
+def twitter_weather(browser):
+    url = "https://twitter.com/marswxreport?lang=en"
+    browser.visit(url)
+
+    html = browser.html
+    weather_soup = BeautifulSoup(html, "html.parser")
+
+    # First, find a tweet with the data-name `Mars Weather`
+    tweet_attrs = {"class": "tweet", "data-name": "Mars Weather"}
+    mars_weather_tweet = weather_soup.find("div", attrs=tweet_attrs)
+
+    # Next, search within the tweet for the p tag containing the tweet text
+    mars_weather = mars_weather_tweet.find("p", "tweet-text").get_text()
+
+    return mars_weather
+
+
+def scrape_hemisphere(html_text):
+
+    # Soupify the html text
+    hemi_soup = BeautifulSoup(html_text, "html.parser")
+
+    # Try to get href and text except if error.
+    try:
+        title_elem = hemi_soup.find("h2", class_="title").get_text()
+        sample_elem = hemi_soup.find("a", text="Sample").get("href")
+
+    except AttributeError:
+
+        # Image error returns None for better front-end handling
+        title_elem = None
+        sample_elem = None
+
+    hemisphere = {
+        "title": title_elem,
+        "img_url": sample_elem
+    }
+
+    return hemisphere
+
+
+def mars_facts():
+    try:
+        df = pd.read_html("http://space-facts.com/mars/")[0]
+    except BaseException:
+        return None
+
+    df.columns = ["description", "value"]
+    df.set_index("description", inplace=True)
+
+    # Add some bootstrap styling to <table>
+    return df.to_html(classes="table table-striped")
+
+
+if __name__ == "__main__":
+
+    # If running as script, print scraped data
+    print(scrape_all())
